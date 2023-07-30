@@ -1,0 +1,339 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+---
+# TRAINING A MODEL TO DIFFERENTIATE BETWEEN DEFAULTERS AND NON DEFAULTERS
+**_MATHS 231_**
+## Produced by:
+##GROUP - 5
+##Muhammad Musa 23100004
+##Malik Muhammad Mussab 23110229
+## Suleman Mahmood 23100011 
+
+
+### **_RESEARCH QUESTION:_**
+
+**_Is there a relationship between a borrower being a defaulter_** (not returning the loan bank) **_and some attributes of the borrower available to the bank_** (family status, job, etc) **_, which could be used to make a model that could predict whther a borrower is going to return the loan or not? _**
+
+
+### **_ABSTRACT:_**
+There is a huge amount of people who take loans but do not return them to banks. This not only damages the banks but also makes them give out loans with a harder hand, possibly, bias. To reduce this problem, we used our dataset to train a binary choice model which could tell whether a borrower will potentially return the loan or not. For this, we used some variables from our dataset which are easily available to banks as well for them to run our model.
+
+
+### **_PROCESS:_**
+
+### 1. Install the required libraries and the corresponding libraries.
+
+```{r, warning=FALSE}
+
+library(dplyr)
+library(caret)
+library(caTools)
+library(ggplot2)
+library(Amelia)
+library(mlbench)
+library(MASS)
+
+```
+
+### 2. We will import the data and study it.
+```{r}
+raw_data<-read.csv("D:/Musa/LUMS/Fall_21/Stats/application_data.csv")
+```
+
+Upon looking at the data, we can see that the column TARGET tells whether the the borrowe of loan paid it on time or not. It is a categorical variable where 1 means the client had payment difficulties.
+
+### 3. Data Cleaning
+
+The data we have imported shows a lot of information and requires thorough going through. After we went through the information, the next important thing was to clean the data. This was done to make sure the model is accurate with little to no effect of any outliers false values.
+There were two things to be cleaned in the data.
+* **Variables**
++ We first eliminated some variables to make the dataset easier to work with. Since we had a lot of variables, the exact number being `r ncol(raw_data)`, we have to decrease it to only those variables that significantly effect the target variable. This will help us get a more accurate model along with making sure the model does not over fit for the given data. To decide which columns to keep and which columns not to keep, we will look at the data again.
+
+```{r}
+summary(raw_data)
+```
++ We see that the data can be divided into sections:
++ *Information about where the client lives:* There are a lot of columns that show normalized information about the different statistics (MEAN, MEDIAN, MODE) about measurements regarding where the client lives. Not only are these columns extra and will have negligible effect on our data, but most of the values in these columns are NAs as it is. As an example, lets look at two columns from this list:
+```{r}
+summary(raw_data$NONLIVINGAREA_MODE)
+summary(raw_data$BASEMENTAREA_MEDI)
+```
++ As we can see, the values already stay close to 0 and the number of values of NA are `r sum(is.na(raw_data$NONLIVINGAREA_MODE))`, which is more than 50% of our data. Hence, we will remove these columns from our data.
+```{r}
+clean<-subset(raw_data,select = -c( NONLIVINGAREA_MODE,OWN_CAR_AGE,EXT_SOURCE_1,APARTMENTS_AVG,BASEMENTAREA_AVG,YEARS_BEGINEXPLUATATION_AVG,YEARS_BUILD_AVG,COMMONAREA_AVG,ELEVATORS_AVG,ENTRANCES_AVG,FLOORSMAX_AVG,FLOORSMIN_AVG,LANDAREA_AVG,LIVINGAPARTMENTS_AVG,LIVINGAREA_AVG,NONLIVINGAPARTMENTS_AVG,NONLIVINGAREA_AVG,APARTMENTS_MODE,BASEMENTAREA_MODE,YEARS_BEGINEXPLUATATION_MODE,YEARS_BUILD_MODE,COMMONAREA_MODE,ELEVATORS_MODE,ENTRANCES_MODE,FLOORSMAX_MODE,FLOORSMIN_MODE,LANDAREA_MODE,LIVINGAPARTMENTS_MODE,LIVINGAREA_MODE,NONLIVINGAPARTMENTS_MODE,NONLIVINGAPARTMENTS_MODE,APARTMENTS_MEDI,BASEMENTAREA_MEDI,YEARS_BEGINEXPLUATATION_MEDI,YEARS_BUILD_MEDI,COMMONAREA_MEDI,ELEVATORS_MEDI,ENTRANCES_MEDI,FLOORSMAX_MEDI,FLOORSMIN_MEDI,LANDAREA_MEDI,LIVINGAPARTMENTS_MEDI,LIVINGAREA_MEDI,NONLIVINGAPARTMENTS_MEDI,NONLIVINGAREA_MEDI,FONDKAPREMONT_MODE,HOUSETYPE_MODE,TOTALAREA_MODE,WALLSMATERIAL_MODE,EMERGENCYSTATE_MODE))
+
+```
++ *Variables with no variation:* There are some FLAG_DOCUMENTS that were supposed to be provided by clients. These flag variables represent whether particular documents have been submitted or not by the clients. However, we can see that the variation in these is very less. For example, in the column 'FLAG_DOCUMENT_10', the number of 0s are `r length(raw_data$FLAG_DOCUMENT_10[raw_data$FLAG_DOCUMENT_10 == 0])` , while the total number of rows are `r nrow(raw_data)`. This trend is followed throughout these columns and hence we will remove them from our data as well.
+```{r}
+clean<-subset(clean,select=-c(FLAG_DOCUMENT_2, FLAG_DOCUMENT_3,FLAG_DOCUMENT_4, FLAG_DOCUMENT_5, FLAG_DOCUMENT_6,FLAG_DOCUMENT_7, FLAG_DOCUMENT_8, FLAG_DOCUMENT_9,FLAG_DOCUMENT_10, FLAG_DOCUMENT_11, FLAG_DOCUMENT_12,FLAG_DOCUMENT_13, FLAG_DOCUMENT_14, FLAG_DOCUMENT_15,FLAG_DOCUMENT_16, FLAG_DOCUMENT_17, FLAG_DOCUMENT_18,FLAG_DOCUMENT_19, FLAG_DOCUMENT_20, FLAG_DOCUMENT_21))
+
+```
+
++ *removing vaiables based on insight and research question:* We were able to remove some further variables absed upon logical thinking. These variables would clearly not have a significant effect on the TARGET value and removing these still leaves us with enough predictors to make a good model.Furthermore, some of these variables were used to remove possible bias. For example, 'REGION_RATING_CLIENT' was a variable which gave a rating for the region where the client lives. This rating was determined by the bank itself and hence could cause a bias.
+
+```{r}
+clean <-subset(clean,select=-c(FLAG_EMP_PHONE, FLAG_WORK_PHONE, FLAG_CONT_MOBILE, FLAG_PHONE, REGION_RATING_CLIENT, REGION_RATING_CLIENT_W_CITY,OBS_30_CNT_SOCIAL_CIRCLE, DEF_30_CNT_SOCIAL_CIRCLE, OBS_60_CNT_SOCIAL_CIRCLE, DEF_60_CNT_SOCIAL_CIRCLE,AMT_REQ_CREDIT_BUREAU_HOUR, AMT_REQ_CREDIT_BUREAU_DAY, AMT_REQ_CREDIT_BUREAU_WEEK, AMT_REQ_CREDIT_BUREAU_MON, AMT_REQ_CREDIT_BUREAU_QRT, AMT_REQ_CREDIT_BUREAU_YEAR,NAME_TYPE_SUITE,REGION_POPULATION_RELATIVE, WEEKDAY_APPR_PROCESS_START, HOUR_APPR_PROCESS_START, REG_REGION_NOT_LIVE_REGION, REG_REGION_NOT_WORK_REGION, LIVE_REGION_NOT_WORK_REGION, REG_CITY_NOT_LIVE_CITY, REG_CITY_NOT_WORK_CITY, LIVE_CITY_NOT_WORK_CITY, SK_ID_CURR))
+summary(clean)
+```
+
++ Hence, we now have a data set with statistically significant columns to serve as predictors for our model. We have removed labels which would not have helped our model and would have only added noise. While doing so, we made sure not to cause any **omitted variable bias**. This bias could happen if we remove variables which have a strong effect on the dependent variable, and could cause an overstatement of the effect of the predictors we chose to keep.
+
+* **Rows**
+
++ We have a large amount of data available to us and we now cleaned it to have an effective data set. Let us visualise what the rows contain:
+```{r}
+str(raw_data)
+```
+
++ Here we noticed a couple of problems:
+1. The variables for which factors or categorical values were used were being cast to integer or char data types.
+* For this we converted these values to factor by using the `as.factor` function in R. However, we realized that our model while training the model automatically treats for this so we ended up letting the model do it and kept this values in the already assigned data types.
+
+2. The variables that measured days had values in negative.
+* A few simple lines were able to help us solve this problem.
+```{r}
+clean$DAYS_BIRTH<-abs(clean$DAYS_BIRTH)
+clean$DAYS_EMPLOYED<-abs(clean$DAYS_EMPLOYED)
+clean$DAYS_REGISTRATION<-abs(clean$DAYS_REGISTRATION)
+clean$DAYS_ID_PUBLISH<-abs(clean$DAYS_ID_PUBLISH)
+clean$DAYS_LAST_PHONE_CHANGE<-abs(clean$DAYS_LAST_PHONE_CHANGE)
+```
+
+3. There were quite a lot of NULL values.
+* To handle this problem, we were going to simply remove the rows with NULL values. However, we realized that in some cases, the NULL (or NA) values were justified, such as 'EXT_SOURCE_2' or 'ORGANIZATION TYPE'. This is because these values are optional and can be left empty, and having these values as NULL actually might have a strong effect on the output of the 'TARGET'. Therefore, we changed the NA value for these to "Unknown" for intuitive sense. For the rest of the variables, we used the deletion method and eliminated the rows with NULL values to make sure that there is no incomplete rows that could corrupt our data.
+
+```{r}
+# Replace NULL VALUES:
+
+clean$ORGANIZATION_TYPE[clean$ORGANIZATION_TYPE == "XNA"] <- "Unknown"
+clean$OCCUPATION_TYPE[clean$OCCUPATION_TYPE == ""] <- "UNKNOWN"
+
+
+# Removing rows with NULL values:
+clean_data <- clean[!(is.na(clean$AMT_ANNUITY)|is.na(clean$AMT_GOODS_PRICE)|is.na(clean$CNT_FAM_MEMBERS)|is.na(clean$DAYS_LAST_PHONE_CHANGE)|clean$CODE_GENDER == "XNA"),]
+summary(clean_data)
+
+```
+
+To further increase the integrity of our data, we used box plots to identify outliers and removed them from our data space. We made box plots only for numeric data as trying to find outliers using box plots in character data will give erroneous results.
+```{r}
+#Making Boxplots for numeric data to identify outliers
+boxplot(clean_data$CNT_CHILDREN)
+boxplot(clean_data$AMT_INCOME_TOTAL)
+boxplot(clean_data$AMT_CREDIT)
+boxplot(clean_data$AMT_ANNUITY)
+boxplot(clean_data$AMT_GOODS_PRICE)
+boxplot(clean_data$DAYS_BIRTH)
+boxplot(clean_data$DAYS_EMPLOYED)
+boxplot(clean_data$DAYS_REGISTRATION)
+boxplot(clean_data$DAYS_ID_PUBLISH)
+boxplot(clean_data$DAYS_LAST_PHONE_CHANGE)
+boxplot(clean_data$CNT_FAM_MEMBERS)
+#Removing Outliers
+outliers <- boxplot(clean_data$CNT_CHILDREN, plot = FALSE)$out
+clean_data<-clean_data[!(clean_data$CNT_CHILDREN %in% outliers), ]
+
+outliers <- boxplot(clean_data$AMT_INCOME_TOTAL, plot = FALSE)$out
+clean_data<-clean_data[!(clean_data$AMT_INCOME_TOTAL %in% outliers), ]
+
+outliers <- boxplot(clean_data$AMT_CREDIT, plot = FALSE)$out
+clean_data<-clean_data[!(clean_data$AMT_CREDIT %in% outliers), ]
+
+outliers <- boxplot(clean_data$AMT_ANNUITY, plot = FALSE)$out
+clean_data<-clean_data[!(clean_data$AMT_ANNUITY %in% outliers), ]
+
+outliers <- boxplot(clean_data$AMT_GOODS_PRICE, plot = FALSE)$out
+clean_data<-clean_data[!(clean_data$AMT_GOODS_PRICE %in% outliers), ]
+
+outliers <- boxplot(clean_data$DAYS_BIRTH, plot = FALSE)$out
+clean_data<-clean_data[!(clean_data$DAYS_BIRTH %in% outliers), ]
+
+outliers <- boxplot(clean_data$DAYS_EMPLOYED, plot = FALSE)$out
+clean_data<-clean_data[!(clean_data$DAYS_EMPLOYED %in% outliers), ]
+
+outliers <- boxplot(clean_data$DAYS_REGISTRATION, plot = FALSE)$out
+clean_data<-clean_data[!(clean_data$DAYS_REGISTRATION %in% outliers), ]
+
+outliers <- boxplot(clean_data$DAYS_ID_PUBLISH, plot = FALSE)$out
+clean_data<-clean_data[!(clean_data$DAYS_ID_PUBLISH %in% outliers), ]
+
+outliers <- boxplot(clean_data$CNT_FAM_MEMBERS, plot = FALSE)$out
+clean_data<-clean_data[!(clean_data$CNT_FAM_MEMBERS %in% outliers), ]
+
+```
+
+### 4. Dividing the data
+
+Since we are making a model, we need test data on which we will be able to run our model to check its accuracy.Therefore, we will now split our data into two random parts, the testing and the training data. Since we are going to tran our model on the training data, it will be significantly larger than the testing data. 
+
+```{r}
+# We are going to use 80% of the data as training data
+
+clean_data$TARGET<-as.factor(clean_data$TARGET) # Explicitly define the dependent variable as being categorical
+split_data = sample.split(clean_data$TARGET, SplitRatio = 0.8)
+train = subset(clean_data, split_data==TRUE)
+test = subset(clean_data, split_data==FALSE)
+
+```
+
+When we get our data, there is one thing we have to keep in mind: since we split the data, there might be some levels for the atrributes with factor data types that are not sufficiently available in both training and testing dataset. This problem luckily only occurs in one variable: 'NAME_INCOME_TYPE'.
+```{r}
+table(clean_data$NAME_INCOME_TYPE)
+table(train$NAME_INCOME_TYPE)
+table(test$NAME_INCOME_TYPE)
+```
+
+Some of the levels in this variable, like Businessman, are in small numbers and hence can be removed from the training and test data set. Otherwise, they might all be in only one of the two sets and that will cause problems. In the above code snipppet, we can see this happening for businessman, where they are all in the train data only. However, we cannot only remove businessman as the test and train data is randomly allocated and so we have to cater all such levels. Furthermore, since they are very small in number, removing them does not effect the accuracy of our model.
+
+```{r}
+train <- train[!(train$NAME_INCOME_TYPE=="Maternity leave"|train$NAME_INCOME_TYPE=="Businessman"),]
+test <- test[!(test$NAME_INCOME_TYPE=="Maternity leave"|test$NAME_INCOME_TYPE=="Businessman"),]
+```
+
+Before running the model, there is one final thing that we have to handle, and that is checking for missing data. Sometimes, we might have missing values in our observable data and it is important to remove them. Missing values also casue problems in plotting graphs later on using the model. First we will check if we have missing models using the missing plot and then purify the data.
+
+```{r}
+#Checking the missing plot for the training data:
+missmap(train, col=c("red", "steelblue"), legend=FALSE)
+#Missing data exists.
+
+#Solving the problem
+train<- train[complete.cases(train),]
+
+#Checking again
+missmap(train, col=c("red", "steelblue"), legend=FALSE)
+
+#NO MISSING VALUES
+
+#Doing the same for the test set
+missmap(test, col=c("red", "steelblue"), legend=FALSE)
+test <- test[complete.cases(test),]
+missmap(test, col=c("red", "steelblue"), legend=FALSE)
+```
+
+
+### 5. Run The Model
+
+```{r}
+model<-glm( TARGET ~ . , family = "binomial" , data=train )
+summary(model)
+
+```
+
+**_LOGISTIC REGRESSION_:** Now that we have made our model, we can start interpreting it. Simple logistic regression helps you classify your answer, rather than predict a value. It is called the logit model too, as we are using log to get a sigmoid model which tells us how likely we are to get the null hypothesis or vice versa. Here we can find some information regarding our model. The deviance residuals stats look good as they are close to being centered on 0 and are roughly symmetrical. Similarly, our **null deviance (the value without using the parameters and only the intercept)** is larger than our residual deviance, which means that our model helps us predict the output better. Lastly, the asterisks in from of some variables represent that these predictors are statistically very significant and the other variables might be showing a patter created to randomness. We can also see that for these variables, the **z value probability is also much less than 0.05, showing statistical significance and a strong relation**. However, we do not remove those predictors completely as it could cause omitted variable bias. There are two more things in the summary, hte **AIC and the Fisher Scoring iterations**. These are talked about later on.
+
+### 6.1. Use the Model to check Accuracy
+
+```{r warning=FALSE}
+pred <- predict(model, newdata = test, type = "response")
+glm.pred <- ifelse(pred > 0.5, "Not Paid", "Paid")
+
+# Visualizing how many values were detected correctly.
+t<-table(glm.pred, test$TARGET)
+t
+
+# Finding accuracy, including both type I and type II errors:
+accuracy_1 = (t[2,1] + t[1,2]) / (t[1,1] + t[2,2]+t[2,1] + t[1,2])
+accuracy_1 = accuracy_1*100
+accuracy_1
+
+```
+
+### 6.2. Using the Model to Make a Graph
+
+As mentioned earlier, the logit model helps us to get a value between 0 and 1 which helps us decided where to classify the output. We are now going to make such a graph:
+
+```{r}
+predicted.data <- data.frame(prob = model$fitted.values, def = train$TARGET)
+predicted.data <- predicted.data[order(predicted.data$prob, decreasing = FALSE),]
+predicted.data$rank <- 1:nrow(predicted.data)
+
+ggplot(data = predicted.data, aes(x=rank, y= prob)) +
+  geom_point(aplha=1, shape=4, stroke=2)+
+  xlab("Index")+
+  ylab("ddsa")
+
+```
+
+
+
+### 7. Making the model better.
+
+Our model gives us a very good accuracy. However, there are faults with this model. For example, while finding the accuracy, we considered both **type I and type II errors**. Type I errors are those where the null hypothesis (in this case the client not being a defaulter) is true but the model rejects it (returns false). If we were to consider only type II errors, our accuracy turns out to be very bad **(`r (t[1,2] * 100) / (t[2,2]+t[1,2])`%)**. In other words, our model is very good for predicting those who will pay the loan but not so good to predict those who will not repay the loan. We will now try to better our model.
+
+One of the reasons for this problem could be that there is a severe imbalance in our dataset for the dependent variable. The 'TARGET' column has way more instances of 0s than 1s. To solve this problem, we are going to use **downsampling**. This will make sure that there are equal number of cases for both the client paying the loan and not paying it. After downsampling our training data, we are going to use the same method as above to make a new model and then train it to see its results.
+
+```{r warning=FALSE}
+
+'%ni%' <- Negate('%in%')  # define 'not in' func
+options(scipen=999)  # prevents printing scientific notations.
+
+# Now we make the training and test data again. This time around, I have used a different function just for the sake of shwoing different ways. However, there is no difference between the two and the above mehtod can be used again to obtain the same result.
+clean_data$TARGET<-as.factor(clean_data$TARGET)
+set.seed(100)
+
+# Dividing the data into test and train sets
+trainDataIndex <- createDataPartition(clean_data$TARGET, p=0.8, list = F)  # 80% training data
+trainData <- clean_data[trainDataIndex, ]
+testData <- clean_data[-trainDataIndex, ]
+
+down_train <- downSample(x = trainData[, colnames(trainData) %ni% "TARGET"],
+                         y = trainData$TARGET)
+# An important thing to note at this point is that when we use this down sample function, our dependent variable, which in this case is 'Target', will change and be now identified by the keyword 'Class'.
+
+down_train <- down_train[!(down_train$NAME_INCOME_TYPE=="Student"|down_train$NAME_INCOME_TYPE=="Maternity leave"|down_train$NAME_INCOME_TYPE=="Pensioner"|down_train$NAME_INCOME_TYPE=="Businessman"),]
+testData <- testData[!(testData$NAME_INCOME_TYPE=="Student"|testData$NAME_INCOME_TYPE=="Maternity leave"|testData$NAME_INCOME_TYPE=="Pensioner"|testData$NAME_INCOME_TYPE=="Businessman"),]
+#We are removing more levels from this variable as in downsampled version, some more levels were reduced to have lesser number of values than required to ensure participation of level in both test and train data.
+
+# Now we remove missing values
+down_train<-down_train[complete.cases(down_train),]
+testData <- testData[complete.cases(testData),]
+
+# Building and fitting a glm model
+down_model<-glm( Class ~ . , family = "binomial" , data=down_train )
+down_pred <- predict(down_model, newdata = testData, type = "response")
+down_glm.pred <- ifelse(down_pred > 0.5, "Not Paid", "Paid")
+summary(down_glm.pred)
+
+# Finding accuracy for both type errors
+dt <- table(down_glm.pred, testData$TARGET)
+accuracy_2 = (dt[2,1] + dt[1,2]) / (dt[1,1] + dt[2,2]+dt[2,1] + dt[1,2])
+accuracy_2*100
+
+# Constructing graph
+predicted.data <- data.frame(prob = down_model$fitted.values, def = down_train$Class)
+predicted.data <- predicted.data[order(predicted.data$prob, decreasing = FALSE),]
+predicted.data$rank <- 1:nrow(predicted.data)
+
+ggplot(data = predicted.data, aes(x=rank, y= prob)) +
+  geom_point(aplha=1, shape=4, stroke=2)+
+  xlab("Index")+
+  ylab("ddsa")
+```
+As we can see the accuracy of this model is lesser than the previous model, but this one is much better in dealing with **Type II error**, i.e. it is more accurate in detecting when someone will not return the money **(Accuracy is `r (dt[1,2] * 100) / (dt[2,2]+dt[1,2])`% in this case, which is a huge improvement)**. Both models might be used for different use cases and they have their advantages, but for the remaining refinement, we are going to use our second model in which we downsampled our dataset as that model is experimentally more sound. We are also using this model because of **AIC and Fisher Scoring**. Going to the end of the summary, we see that we have the AIC. The **AIC** is the measure of how good your model is and can be thought of as the alternative to the **R^2^** in linear regression. Similarly, the lesser the number of Fisher scoring iteration our model requires, the better our model is, as **the Fisher Scoring iterations tell us how quickly our glm() function converged on the maximum likelihood estimates for the coefficients**. The AIC decreases by a lot in the downsampled model, and this change shows that this model is much better than our original one.
+
+### 8. Further Refining the Downsampled Model:
+To refine a model, the main goal is to decrease the deviance and the AIc of a model. Since we have a lot of independent predictors, we are going to now run a function which will identify for us which predictors are actually not helping and are causing a higher AIC and will remove them from our dataset:
+```{r}
+
+final_model<-stepAIC(down_model,direction="backward",trace=FALSE)
+summary(final_model)
+e <- as.data.frame(exp(coef(final_model)))
+# As mentioned earlier, factors are made when you run the glm model. Here, we get the likeliness for each predictor and this shows by how much the likeliness will increase for the output TARGET for a change in factor in the variables. This change is determined relative to a base factor level set by default in R for each variable. The more statistically significant variables cause a higher increase in likeliness. 
+
+# Testing model
+final_pred <- predict(final_model, newdata = testData, type = "response")
+
+
+final_glm.pred <- ifelse(final_pred > 0.5, "Not Paid", "Paid")
+```
+
+### 9. CONCLUSION:
+We were able to test our logistic model and come up with an affirmative answer to our research question and showed that there indeed is a relation between a client being a defaulter and our chose parameters. We were further able to  test our model on data to see how well it works and refine it. We were able to bring down the AIC value from `r model$aic` to `r final_model$aic`. We also saw that there was a difference between the null and residual deviance, which shows the effectiveness of the model and we were also able to bring down the residual deviance from `r model$deviance` to `r final_model$deviance`.
+
+
+### 10. REFERENCES:
+[Dataset](https://www.kaggle.com/mishra5001/credit-card)
+
